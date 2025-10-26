@@ -1,0 +1,23 @@
+{
+  "name": "tinvest",
+  "version": "1.0.0",
+  "description": "A full-stack stock tracking application",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\"",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && npm run dev",
+    "install:all": "npm install && cd frontend && npm install && cd ../backend && npm install"
+  },
+  "devDependencies": {
+    "@types/recharts": "^1.8.29",
+    "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "recharts": "^3.3.0"
+  }
+}

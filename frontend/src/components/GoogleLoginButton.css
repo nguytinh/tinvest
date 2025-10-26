@@ -1,0 +1,15 @@
+.google-login-wrapper {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  margin: 16px 0;
+}
+
+.google-login-wrapper > div {
+  width: 100% !important;
+}
+
+.google-login-wrapper iframe {
+  width: 100% !important;
+}
+
