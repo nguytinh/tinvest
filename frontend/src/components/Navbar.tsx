@@ -45,6 +45,14 @@ function Navbar() {
           <Link to="/crypto" className={`navbar-link ${isActive('/crypto')}`}>
             Crypto
           </Link>
+          <a 
+            href="https://chatgpt.com/g/g-691f9fdac7b881918e114805bfbe5544" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="navbar-link"
+          >
+            AI Analysis
+          </a>
         </div>
 
         <div className="navbar-actions">

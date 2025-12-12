@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
+import BallView from '../components/BallView'
 import './Watchlist.css'
 
 interface Stock {
@@ -17,7 +18,7 @@ function Watchlist() {
   const [stocks, setStocks] = useState<Stock[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
+  const [viewMode, setViewMode] = useState<'grid' | 'list' | 'ball'>('grid')
   const [sortBy, setSortBy] = useState<'default' | 'gainers' | 'losers'>('default')
   const [isRealData, setIsRealData] = useState(false) // Track if we have real API data
   const [watchlistStocks, setWatchlistStocks] = useState<Array<{symbol: string, name: string, isFavorite?: boolean}>>([])
@@ -238,15 +239,22 @@ function Watchlist() {
       // Fetch all 28 stocks from the watchlist
       console.log(`Fetching all ${watchlistStocks.length} stocks from Finnhub...`)
       
-      // Fetch stocks with delay between calls to avoid rate limiting (1 second = 60 calls/minute max)
-      const results: Stock[] = []
+      // Fetch all stocks in parallel
+      console.log(`Fetching all ${watchlistStocks.length} stocks from Finnhub...`)
       
-      for (let i = 0; i < watchlistStocks.length; i++) {
-        const stock = watchlistStocks[i]
+      const fetchPromises = watchlistStocks.map(async (stock) => {
         try {
           const response = await fetch(
             `https://finnhub.io/api/v1/quote?symbol=${stock.symbol}&token=${API_KEY}`
           )
+          
+          if (!response.ok) {
+            if (response.status === 429) {
+              console.warn(`Rate limit hit for ${stock.symbol}`)
+            }
+            return null
+          }
+
           const data = await response.json()
           
           if (data.c && data.pc) {
@@ -255,27 +263,22 @@ function Watchlist() {
             const change = currentPrice - previousClose
             const changePercent = data.dp || ((change / previousClose) * 100)
             
-            results.push({
+            return {
               symbol: stock.symbol,
               name: stock.name,
               price: parseFloat(currentPrice.toFixed(2)),
               change: parseFloat(change.toFixed(2)),
               changePercent: parseFloat(changePercent.toFixed(2)),
-            })
-          } else {
-            // Skip this stock if API fails
-            console.warn(`Skipping ${stock.symbol} due to API failure`)
           }
-          
-          // Add delay between API calls (1 second = 60 calls/minute max)
-          if (i < watchlistStocks.length - 1) {
-            await new Promise(resolve => setTimeout(resolve, 500))
           }
+          return null
         } catch (err) {
           console.error(`Error fetching ${stock.symbol}:`, err)
-          console.warn(`Skipping ${stock.symbol} due to error`)
+          return null
         }
-      }
+      })
+      
+      const results = (await Promise.all(fetchPromises)).filter((stock): stock is Stock => stock !== null)
       
       // Use all successfully fetched stocks
       const allResults = results
@@ -408,6 +411,13 @@ function Watchlist() {
               >
                 ☰
               </button>
+              <button 
+                onClick={() => setViewMode('ball')}
+                className={`view-button ${viewMode === 'ball' ? 'active' : ''}`}
+                title="Ball view"
+              >
+                ●
+              </button>
             </div>
             <button onClick={handleRefresh} className="refresh-button" disabled={loading} title="Refresh watchlist">
               <span className={`refresh-icon ${loading ? 'spinning' : ''}`}>↻</span>
@@ -427,6 +437,9 @@ function Watchlist() {
             <p>Loading watchlist...</p>
           </div>
         ) : sortedStocks.length > 0 ? (
+          viewMode === 'ball' ? (
+            <BallView stocks={sortedStocks} />
+          ) : (
           <div className={`watchlist-${viewMode}`}>
             {sortedStocks.map((stock) => (
               <div 
@@ -463,6 +476,7 @@ function Watchlist() {
               </div>
             ))}
           </div>
+          )
         ) : (
           <div className="no-data">
             <p>No watchlist data available. Click "Refresh" to load current stock prices.</p>

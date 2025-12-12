@@ -605,3 +605,19 @@
   }
 }
 
+/* Ball View */
+.ball-view-container {
+  width: 100%;
+  height: calc(100vh - 250px);
+  position: relative;
+  overflow: hidden;
+  background-color: transparent;
+  border-radius: 12px;
+  border: 1px solid var(--border-primary);
+}
+
+.ball-view-container canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}

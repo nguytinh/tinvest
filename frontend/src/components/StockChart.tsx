@@ -61,131 +61,119 @@ function StockChart({ symbol, currentPrice }: StockChartProps) {
     return () => clearTimeout(timer)
   }, [symbol, timeRange])
 
-  const getAlphaVantageFunction = () => {
-    // Alpha Vantage only supports daily data for free tier
-    // For intraday, we'd need premium which isn't free
-    switch (timeRange) {
-      case '1D':
-      case '5D':
-        return 'TIME_SERIES_DAILY' // Best we can do with free tier
-      case '1M':
-      case '6M':
-      case 'YTD':
-      case '1Y':
-        return 'TIME_SERIES_DAILY'
-      case '5Y':
-        return 'TIME_SERIES_WEEKLY' // Weekly for longer timeframes
-      default:
-        return 'TIME_SERIES_DAILY'
-    }
-  }
-
-  const filterDataByTimeRange = (data: any[]) => {
-    const now = Date.now()
-    let cutoffDate: number
-
-    switch (timeRange) {
-      case '1D':
-        cutoffDate = now - 86400000 // 1 day
-        break
-      case '5D':
-        cutoffDate = now - 432000000 // 5 days
-        break
-      case '1M':
-        cutoffDate = now - 2592000000 // 30 days
-        break
-      case '6M':
-        cutoffDate = now - 15552000000 // 180 days
-        break
-      case 'YTD':
-        const yearStart = new Date(new Date().getFullYear(), 0, 1)
-        cutoffDate = yearStart.getTime()
-        break
-      case '1Y':
-        cutoffDate = now - 31536000000 // 365 days
-        break
-      case '5Y':
-        cutoffDate = now - 157680000000 // 5 years
-        break
-      default:
-        cutoffDate = now - 2592000000
-    }
-
-    return data.filter(point => point.timestamp >= cutoffDate)
-  }
-
   const fetchChartData = async () => {
     setLoading(true)
     setError(null)
 
     try {
-      const API_KEY = import.meta.env.VITE_ALPHA_VANTAGE_API_KEY
+      const API_KEY = 'I8FPzew0IaP3sS9027sCuGW7fHnfXxq0' // Polygon.io API key
 
-      if (!API_KEY) {
-        throw new Error('Alpha Vantage API key not configured. Get a free key at https://www.alphavantage.co/support/#api-key')
+      console.log(`Fetching real historical data for ${symbol} (${timeRange}) from Polygon.io...`)
+
+      // Calculate date range
+      const now = new Date()
+      let from: string
+      let to: string = now.toISOString().split('T')[0] // Today in YYYY-MM-DD format
+      let multiplier = 1
+      let timespan = 'day'
+
+      switch (timeRange) {
+        case '1D':
+          // Get previous trading day
+          const yesterday = new Date(now)
+          yesterday.setDate(yesterday.getDate() - 1)
+          from = yesterday.toISOString().split('T')[0]
+          multiplier = 5
+          timespan = 'minute'
+          break
+        case '5D':
+          const fiveDaysAgo = new Date(now)
+          fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 7) // Get 7 days to account for weekends
+          from = fiveDaysAgo.toISOString().split('T')[0]
+          multiplier = 30
+          timespan = 'minute'
+          break
+        case '1M':
+          const oneMonthAgo = new Date(now)
+          oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1)
+          from = oneMonthAgo.toISOString().split('T')[0]
+          multiplier = 1
+          timespan = 'day'
+          break
+        case '6M':
+          const sixMonthsAgo = new Date(now)
+          sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6)
+          from = sixMonthsAgo.toISOString().split('T')[0]
+          multiplier = 1
+          timespan = 'day'
+          break
+        case 'YTD':
+          const yearStart = new Date(now.getFullYear(), 0, 1)
+          from = yearStart.toISOString().split('T')[0]
+          multiplier = 1
+          timespan = 'day'
+          break
+        case '1Y':
+          const oneYearAgo = new Date(now)
+          oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
+          from = oneYearAgo.toISOString().split('T')[0]
+          multiplier = 1
+          timespan = 'day'
+          break
+        case '5Y':
+          const fiveYearsAgo = new Date(now)
+          fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 5)
+          from = fiveYearsAgo.toISOString().split('T')[0]
+          multiplier = 1
+          timespan = 'week'
+          break
+        default:
+          const defaultDate = new Date(now)
+          defaultDate.setMonth(defaultDate.getMonth() - 1)
+          from = defaultDate.toISOString().split('T')[0]
+          multiplier = 1
+          timespan = 'day'
       }
 
-      // Add 1-second delay before chart data to avoid rate limiting
-      await new Promise(resolve => setTimeout(resolve, 1000))
-
-      const functionType = getAlphaVantageFunction()
-
-      console.log(`Fetching chart data for ${symbol} (${timeRange}) using ${functionType}...`)
-
-      const response = await fetch(
-        `https://www.alphavantage.co/query?function=${functionType}&symbol=${symbol}&apikey=${API_KEY}&outputsize=full`
-      )
-
+      // Polygon.io aggregates endpoint
+      const url = `https://api.polygon.io/v2/aggs/ticker/${symbol}/range/${multiplier}/${timespan}/${from}/${to}?adjusted=true&sort=asc&apiKey=${API_KEY}`
+      
+      console.log(`Fetching from: ${url}`)
+      
+      const response = await fetch(url)
       const data = await response.json()
 
-      // Check for API error messages
-      if (data['Error Message']) {
-        throw new Error('Invalid stock symbol or API error')
+      // Check for API errors
+      if (data.status === 'ERROR') {
+        throw new Error(data.error || 'API error occurred')
       }
 
-      if (data['Note']) {
-        throw new Error('API rate limit reached. Please wait a minute and try again.')
+      if (data.status === 'NOT_FOUND' || !data.results || data.results.length === 0) {
+        throw new Error('No historical data available for this stock')
       }
 
-      // Parse the time series data
-      let timeSeriesKey = ''
-      if (data['Time Series (Daily)']) {
-        timeSeriesKey = 'Time Series (Daily)'
-      } else if (data['Weekly Time Series']) {
-        timeSeriesKey = 'Weekly Time Series'
-      } else {
-        throw new Error('No data available for this stock')
-      }
-
-      const timeSeries = data[timeSeriesKey]
-      
-      if (!timeSeries || Object.keys(timeSeries).length === 0) {
-        throw new Error('No historical data available')
-      }
-
-      // Convert to our format
-      const allData: ChartDataPoint[] = Object.entries(timeSeries).map(([date, values]: [string, any]) => {
-        const timestamp = new Date(date).getTime()
+      // Convert Polygon.io data to our format
+      const chartPoints: ChartDataPoint[] = data.results.map((bar: any) => {
+        const timestamp = bar.t // Polygon returns timestamp in milliseconds
+        const date = new Date(timestamp)
+        
         return {
           timestamp,
-          date: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-          price: parseFloat(values['4. close']),
+          date: formatDateForTimeRange(date),
+          price: parseFloat(bar.c.toFixed(2)) // closing price
         }
-      }).sort((a, b) => a.timestamp - b.timestamp) // Sort chronologically
+      })
 
-      // Filter by time range
-      const filteredData = filterDataByTimeRange(allData)
-
-      if (filteredData.length === 0) {
-        throw new Error('No data available for this time range')
+      if (chartPoints.length === 0) {
+        throw new Error('No data points available for this time range')
       }
 
-      setChartData(filteredData)
+      setChartData(chartPoints)
 
       // Calculate price change
-      if (filteredData.length > 0) {
-        const firstPrice = filteredData[0].price
-        const lastPrice = filteredData[filteredData.length - 1].price
+      if (chartPoints.length > 0) {
+        const firstPrice = chartPoints[0].price
+        const lastPrice = chartPoints[chartPoints.length - 1].price
         const change = lastPrice - firstPrice
         const changePercent = (change / firstPrice) * 100
 
@@ -196,11 +184,11 @@ function StockChart({ symbol, currentPrice }: StockChartProps) {
       // Cache the data for 10 minutes
       const cacheKey = `chart-${symbol}-${timeRange}`
       localStorage.setItem(cacheKey, JSON.stringify({
-        data: filteredData,
+        data: chartPoints,
         timestamp: Date.now()
       }))
       
-      console.log(`Chart loaded: ${filteredData.length} data points`)
+      console.log(`Chart loaded: ${chartPoints.length} real data points from Polygon.io`)
     } catch (err) {
       console.error('Error fetching chart data:', err)
       const errorMessage = err instanceof Error ? err.message : 'Failed to load chart data'
@@ -208,6 +196,16 @@ function StockChart({ symbol, currentPrice }: StockChartProps) {
       setChartData([])
     } finally {
       setLoading(false)
+    }
+  }
+
+  const formatDateForTimeRange = (date: Date): string => {
+    if (timeRange === '1D' || timeRange === '5D') {
+      return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+    } else if (timeRange === '5Y') {
+      return date.toLocaleDateString('en-US', { year: '2-digit', month: 'short' })
+    } else {
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
     }
   }
 

@@ -18,6 +18,8 @@
     "concurrently": "^8.2.2"
   },
   "dependencies": {
+    "@types/matter-js": "^0.20.2",
+    "matter-js": "^0.20.0",
     "recharts": "^3.3.0"
   }
 }
